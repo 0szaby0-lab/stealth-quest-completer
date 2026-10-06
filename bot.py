@@ -177,10 +177,18 @@ def parse_quest(q: dict) -> dict:
     """Extracts relevant info from a Discord quest JSON."""
     qid = q.get("id", "")
     cfg = q.get("config", {})
-    name = cfg.get("name", "Unknown quest")
+
+    # Quest name lives in config.messages.quest_name or config.application.name
+    messages = cfg.get("messages", {})
+    name = messages.get("quest_name") or messages.get("game_title") or cfg.get("application", {}).get("name", "Unknown quest")
+
     status = q.get("status", "UNKNOWN")
 
+    # Task config — try taskConfigV2 first, then fall back to older paths
     task_cfg = cfg.get("taskConfigV2", {}).get("tasks", {})
+    if not task_cfg:
+        task_cfg = cfg.get("tasks", {})
+
     task_type = ""
     target = 60
     app_id = ""
@@ -193,6 +201,7 @@ def parse_quest(q: dict) -> dict:
             app_id = apps[0].get("id", "")
         break
 
+    # Fallback: app id from config.application
     if not app_id:
         app_id = cfg.get("application", {}).get("id", "")
 
@@ -422,7 +431,7 @@ async def cmd_autoquest(ctx: commands.Context):
     """Auto-complete your Discord quests."""
 
     if isinstance(ctx.channel, discord.DMChannel):
-        await ctx.send("This command only works in servers. Use it in the server where the bot is.")
+        await ctx.send("This command only works in servers. Use it in the server where the bot is.", delete_after=10)
         return
 
     user_id = ctx.author.id
@@ -451,7 +460,7 @@ async def cmd_autoquest(ctx: commands.Context):
                 "saved to disk, or shared. It will be deleted after 1 hour "
                 f"or you can delete it with `{PREFIX}clear`."
             )
-            await ctx.send("I've sent you a DM to enter your token. Check your messages.", delete_after=30)
+            await ctx.send("I've sent you a DM to enter your token. Check your messages.", delete_after=15)
         except discord.Forbidden:
             await ctx.send(
                 "I can't DM you. Please enable 'Allow direct messages from server members' "
@@ -462,27 +471,28 @@ async def cmd_autoquest(ctx: commands.Context):
         return
 
     # Token exists — complete quests
-    await ctx.send(f"Starting quest completion for {ctx.author.mention}...")
+    await ctx.send(f"Starting quest completion...", delete_after=10)
 
     async def callback(msg: str):
-        await ctx.send(msg)
+        await ctx.send(msg, delete_after=60)
 
     try:
         success = await complete_quests(token, callback)
         if not success:
             clear_token(user_id)
             await ctx.send(
-                "Your token is invalid or expired. Use `,autoquest` again to enter a new one."
+                "Your token is invalid or expired. Use `,autoquest` again to enter a new one.",
+                delete_after=30
             )
     except Exception as e:
-        await ctx.send(f"Error: {e}")
+        await ctx.send(f"Error: {e}", delete_after=30)
 
 
 @bot.command(name="quests")
 async def cmd_quests(ctx: commands.Context):
     """List your pending quests."""
     if isinstance(ctx.channel, discord.DMChannel):
-        await ctx.send("This command only works in servers.")
+        await ctx.send("This command only works in servers.", delete_after=30)
         return
 
     user_id = ctx.author.id
@@ -496,7 +506,7 @@ async def cmd_quests(ctx: commands.Context):
     api = QuestAPI(token)
     user = await api.get_user()
     if not user:
-        await ctx.send("Invalid token.")
+        await ctx.send("Invalid token.", delete_after=30)
         clear_token(user_id)
         return
 
@@ -507,7 +517,7 @@ async def cmd_quests(ctx: commands.Context):
         quests_list = quests_raw
 
     if not quests_list:
-        await ctx.send("You have no quests available.")
+        await ctx.send("You have no quests available.", delete_after=30)
         return
 
     embed = discord.Embed(
@@ -526,7 +536,7 @@ async def cmd_quests(ctx: commands.Context):
     if len(quests_list) > 10:
         embed.set_footer(text=f"+{len(quests_list) - 10} more...")
 
-    await ctx.send(embed=embed)
+    await ctx.send(embed=embed, delete_after=30)
 
 
 @bot.command(name="status")
@@ -556,7 +566,7 @@ async def cmd_clear(ctx: commands.Context):
 async def cmd_debug(ctx: commands.Context):
     """Debug: shows raw quest API response (admin only)."""
     if isinstance(ctx.channel, discord.DMChannel):
-        await ctx.send("This command only works in servers.")
+        await ctx.send("This command only works in servers.", delete_after=30)
         return
 
     token = get_token(ctx.author.id)
@@ -597,7 +607,7 @@ async def cmd_help(ctx: commands.Context):
     embed.add_field(name=f"`{PREFIX}help`", value="Show this help message", inline=False)
     embed.add_field(name=f"`{PREFIX}debug`", value="Show raw quest API response (for troubleshooting)", inline=False)
     embed.set_footer(text="discord.gg/hqE5drDHF7 | Token is never saved to disk")
-    await ctx.send(embed=embed)
+    await ctx.send(embed=embed, delete_after=30)
 
 
 # ─── Periodic cleanup of expired tokens ─────────────────────────────────────
