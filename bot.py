@@ -147,8 +147,14 @@ class QuestAPI:
                 return [data]
         return []
 
-    async def enroll(self, quest_id: str):
-        st, _ = await self._req("POST", f"/quests/{quest_id}/enroll")
+    async def enroll(self, quest_id: str, traffic_sealed=None):
+        body = {
+            "location": 11,
+            "is_targeted": False,
+            "metadata_sealed": None,
+            "traffic_metadata_sealed": traffic_sealed,
+        }
+        st, _ = await self._req("POST", f"/quests/{quest_id}/enroll", body)
         return st in (200, 201, 204)
 
     async def heartbeat(self, quest_id: str, stream_key: str, app_id: str, terminal: bool = False):
@@ -165,8 +171,15 @@ class QuestAPI:
         st, data = await self._req("POST", f"/quests/{quest_id}/video-progress", body)
         return st in (200, 201), data
 
-    async def claim(self, quest_id: str):
-        st, _ = await self._req("POST", f"/quests/{quest_id}/claim-reward")
+    async def claim(self, quest_id: str, traffic_sealed=None):
+        body = {
+            "platform": 0,
+            "location": 11,
+            "is_targeted": False,
+            "metadata_sealed": None,
+            "traffic_metadata_sealed": traffic_sealed,
+        }
+        st, _ = await self._req("POST", f"/quests/{quest_id}/claim-reward", body)
         return st in (200, 201)
 
 
@@ -182,6 +195,15 @@ def parse_quest(q: dict) -> dict:
     name = messages.get("quest_name") or messages.get("game_title") or cfg.get("application", {}).get("name", "Unknown quest")
 
     status = q.get("status", "UNKNOWN")
+
+    # Check if already enrolled
+    user_status = q.get("userStatus", {})
+    enrolled_at = user_status.get("enrolledAt")
+    completed_at = user_status.get("completedAt")
+
+    # traffic_metadata_sealed — server-issued blob that must be echoed back
+    # on enroll and claim. Comes from the quest itself.
+    traffic_sealed = q.get("trafficMetadataSealed")
 
     # Task config — try taskConfigV2 first, then fall back to older paths
     task_cfg = cfg.get("taskConfigV2", {}).get("tasks", {})
@@ -211,6 +233,9 @@ def parse_quest(q: dict) -> dict:
         "task_type": task_type,
         "target": target,
         "app_id": app_id,
+        "enrolled": bool(enrolled_at),
+        "completed": bool(completed_at),
+        "traffic_sealed": traffic_sealed,
     }
 
 
@@ -257,17 +282,22 @@ async def complete_quests(token: str, callback):
     skipped = 0
 
     for i, q in enumerate(quests, 1):
-        if q["status"] == "COMPLETED":
+        if q["completed"]:
             await callback(f"[{i}/{len(quests)}] **{q['name']}** — already completed")
             skipped += 1
             continue
 
-        await callback(f"[{i}/{len(quests)}] **{q['name']}** — enrolling...")
-
-        if not await api.enroll(q["id"]):
-            await callback(f"[{i}/{len(quests)}] Failed to enroll in **{q['name']}**")
-            failed += 1
-            continue
+        # Skip quests that are already enrolled but not completed
+        if not q["enrolled"]:
+            await callback(f"[{i}/{len(quests)}] **{q['name']}** — enrolling...")
+            if not await api.enroll(q["id"], q["traffic_sealed"]):
+                await callback(f"[{i}/{len(quests)}] Failed to enroll in **{q['name']}**")
+                failed += 1
+                continue
+            # Wait after enroll like the original does
+            await asyncio.sleep(random.uniform(0.8, 1.5))
+        else:
+            await callback(f"[{i}/{len(quests)}] **{q['name']}** — already enrolled, completing...")
 
         tt = q["task_type"]
         target = q["target"] if q["target"] > 0 else 60
@@ -289,7 +319,7 @@ async def complete_quests(token: str, callback):
             continue
 
         await callback(f"[{i}/{len(quests)}] **{q['name']}** — claiming reward...")
-        claimed = await api.claim(q["id"])
+        claimed = await api.claim(q["id"], q["traffic_sealed"])
 
         if claimed:
             completed += 1
