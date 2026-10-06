@@ -567,5 +567,9 @@ async def before_cleanup():
 # ─── Main ───────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    cleanup_tokens.start()
+    # Start the cleanup task inside the bot's event loop
+    @bot.listen()
+    async def on_startup_once():
+        cleanup_tokens.start()
+
     bot.run(BOT_TOKEN)
