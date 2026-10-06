@@ -78,25 +78,6 @@ def clear_token(user_id: int) -> bool:
 
 API = "https://discord.com/api/v10"
 
-# Discord requires these headers for quest API endpoints.
-# Without X-Super-Properties, the quest API returns 401.
-import base64 as _b64
-import json as _json
-
-_SUPER_PROPS = _b64.b64encode(_json.dumps({
-    "os": "Windows",
-    "browser": "Discord Client",
-    "release_channel": "stable",
-    "client_version": "1.0.9255",
-    "os_version": "10.0.22621",
-    "os_arch": "x64",
-    "system_locale": "en-US",
-    "client_build_number": 381078,
-    "design_id": 0,
-}).encode()).decode()
-
-_CONTEXT_PROPS = _b64.b64encode(_json.dumps({}).encode()).decode()
-
 
 class QuestAPI:
     def __init__(self, token: str):
@@ -105,10 +86,7 @@ class QuestAPI:
             "Authorization": token,
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9255 Chrome/120.0.6099.291 Electron/29.2.4 Safari/537.36",
-            "X-Super-Properties": _SUPER_PROPS,
-            "X-Context-Properties": _CONTEXT_PROPS,
             "X-Discord-Locale": "en-US",
-            "X-Debug-Options": "bugReporterEnabled",
         }
 
     async def _req(self, method: str, path: str, body=None):
