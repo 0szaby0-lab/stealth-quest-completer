@@ -563,7 +563,7 @@ async def cmd_clear(ctx: commands.Context):
 
 @bot.command(name="debug")
 async def cmd_debug(ctx: commands.Context):
-    """Debug: shows raw quest API response (admin only)."""
+    """Debug: shows raw quest API response."""
     if isinstance(ctx.channel, discord.DMChannel):
         await ctx.send("This command only works in servers.", delete_after=30)
         return
@@ -575,18 +575,23 @@ async def cmd_debug(ctx: commands.Context):
 
     await ctx.typing()
     api = QuestAPI(token)
-    st, data = await api._req("GET", "/quests/@me")
 
-    # Truncate response to fit in Discord message
+    # Test 1: validate token with /users/@me
+    st_user, data_user = await api._req("GET", "/users/@me")
+    # Test 2: fetch quests
+    st_quests, data_quests = await api._req("GET", "/quests/@me")
+
     import json
-    raw = json.dumps(data, indent=2) if data else "None"
-    if len(raw) > 1500:
-        raw = raw[:1500] + "\n... (truncated)"
+    user_raw = json.dumps(data_user, indent=2)[:300] if data_user else "None"
+    quests_raw = json.dumps(data_quests, indent=2)[:1000] if data_quests else "None"
 
     embed = discord.Embed(
-        title="Debug: Quest API response",
-        description=f"```\nHTTP {st}\n{raw}\n```",
-        color=0x5865F2,
+        title="Debug: API response",
+        description=(
+            f"**Token check** (/users/@me):\n```\nHTTP {st_user}\n{user_raw}\n```\n\n"
+            f"**Quests** (/quests/@me):\n```\nHTTP {st_quests}\n{quests_raw}\n```"
+        ),
+        color=0x5865F2 if st_user == 200 else 0xED4245,
     )
     await ctx.send(embed=embed, delete_after=60)
 
