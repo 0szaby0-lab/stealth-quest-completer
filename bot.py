@@ -194,15 +194,18 @@ def parse_quest(q: dict) -> dict:
     messages = cfg.get("messages", {})
     name = messages.get("quest_name") or messages.get("game_title") or cfg.get("application", {}).get("name", "Unknown quest")
 
-    status = q.get("status", "UNKNOWN")
-
-    # Check if already enrolled
+    # Quest status — Discord uses both top-level 'status' and userStatus.completedAt
+    # The original script checks: !q.userStatus?.completedAt && notExpired(q)
+    # Also filters out COMPLETED and CLAIMED statuses
     user_status = q.get("userStatus", {})
-    enrolled_at = user_status.get("enrolledAt")
     completed_at = user_status.get("completedAt")
+    enrolled_at = user_status.get("enrolledAt")
+
+    # Also check top-level status field
+    top_status = q.get("status", "")
+    is_completed = bool(completed_at) or top_status in ("COMPLETED", "CLAIMED")
 
     # traffic_metadata_sealed — server-issued blob that must be echoed back
-    # on enroll and claim. Comes from the quest itself.
     traffic_sealed = q.get("trafficMetadataSealed")
 
     # Task config — try taskConfigV2 first, then fall back to older paths
@@ -222,19 +225,18 @@ def parse_quest(q: dict) -> dict:
             app_id = apps[0].get("id", "")
         break
 
-    # Fallback: app id from config.application
     if not app_id:
         app_id = cfg.get("application", {}).get("id", "")
 
     return {
         "id": qid,
         "name": name,
-        "status": status,
+        "status": top_status,
         "task_type": task_type,
         "target": target,
         "app_id": app_id,
         "enrolled": bool(enrolled_at),
-        "completed": bool(completed_at),
+        "completed": is_completed,
         "traffic_sealed": traffic_sealed,
     }
 
@@ -275,36 +277,46 @@ async def complete_quests(token: str, callback):
         return True
 
     quests = [parse_quest(q) for q in quests_list]
-    await callback(f"Found **{len(quests)}** quests. Completing...")
+    total_quests = len(quests)
+
+    # Filter out completed quests — only process quests that need doing
+    pending = [q for q in quests if not q["completed"]]
+    already_done = total_quests - len(pending)
+
+    if not pending:
+        await callback(f"All {already_done} quests are already completed. Nothing to do!")
+        return True
+
+    await callback(f"Found **{len(pending)}** pending quests ({already_done} already done). Completing...")
 
     completed = 0
     failed = 0
     skipped = 0
 
-    for i, q in enumerate(quests, 1):
+    for i, q in enumerate(pending, 1):
         if q["completed"]:
-            await callback(f"[{i}/{len(quests)}] **{q['name']}** — already completed")
+            await callback(f"[{i}/{len(pending)}] **{q['name']}** — already completed")
             skipped += 1
             continue
 
         # Skip quests that are already enrolled but not completed
         if not q["enrolled"]:
-            await callback(f"[{i}/{len(quests)}] **{q['name']}** — enrolling...")
+            await callback(f"[{i}/{len(pending)}] **{q['name']}** — enrolling...")
             if not await api.enroll(q["id"], q["traffic_sealed"]):
-                await callback(f"[{i}/{len(quests)}] Failed to enroll in **{q['name']}**")
+                await callback(f"[{i}/{len(pending)}] Failed to enroll in **{q['name']}**")
                 failed += 1
                 continue
             # Wait after enroll like the original does
             await asyncio.sleep(random.uniform(0.8, 1.5))
         else:
-            await callback(f"[{i}/{len(quests)}] **{q['name']}** — already enrolled, completing...")
+            await callback(f"[{i}/{len(pending)}] **{q['name']}** — already enrolled, completing...")
 
         tt = q["task_type"]
         target = q["target"] if q["target"] > 0 else 60
         app_id = q["app_id"] or "0"
         stream_key = build_stream_key(user_id)
 
-        await callback(f"[{i}/{len(quests)}] **{q['name']}** ({tt}) — sending progress...")
+        await callback(f"[{i}/{len(pending)}] **{q['name']}** ({tt}) — sending progress...")
 
         try:
             if "VIDEO" in tt:
@@ -314,26 +326,26 @@ async def complete_quests(token: str, callback):
             else:
                 await _complete_heartbeat(api, q, stream_key, app_id, target)
         except Exception as e:
-            await callback(f"[{i}/{len(quests)}] Error on **{q['name']}**: {e}")
+            await callback(f"[{i}/{len(pending)}] Error on **{q['name']}**: {e}")
             failed += 1
             continue
 
-        await callback(f"[{i}/{len(quests)}] **{q['name']}** — claiming reward...")
+        await callback(f"[{i}/{len(pending)}] **{q['name']}** — claiming reward...")
         claimed = await api.claim(q["id"], q["traffic_sealed"])
 
         if claimed:
             completed += 1
-            await callback(f"[{i}/{len(quests)}] **{q['name']}** — done!")
+            await callback(f"[{i}/{len(pending)}] **{q['name']}** — done!")
         else:
             completed += 1
-            await callback(f"[{i}/{len(quests)}] **{q['name']}** — completed (claim pending)")
+            await callback(f"[{i}/{len(pending)}] **{q['name']}** — completed (claim pending)")
 
-        if i < len(quests):
+        if i < len(pending):
             delay = random.uniform(5, 12)
             await asyncio.sleep(delay)
 
     await callback(
-        f"**Summary:** {completed} completed | {skipped} already done | {failed} failed"
+        f"**Summary:** {completed} completed | {already_done} already done | {failed} failed"
     )
     return True
 
