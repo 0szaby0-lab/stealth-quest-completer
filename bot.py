@@ -110,14 +110,11 @@ class QuestAPI:
 
     async def get_quests(self):
         """Fetches quests from Discord API. Returns a list of quest dicts."""
-        st, data = await self._req("GET", "/users/@me/quests")
+        st, data = await self._req("GET", "/quests/@me")
         if st != 200 or not data:
             return []
 
-        # Discord returns quests in various formats depending on the API version:
-        # 1. {"quests": [...]}
-        # 2. [quest1, quest2, ...]
-        # 3. {"1": quest1, "2": quest2, ...} (Map serialized as object)
+        # Discord returns quests in various formats
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
@@ -152,7 +149,7 @@ class QuestAPI:
         return []
 
     async def enroll(self, quest_id: str):
-        st, _ = await self._req("POST", f"/users/@me/quests/{quest_id}/enroll")
+        st, _ = await self._req("POST", f"/quests/{quest_id}/enroll")
         return st in (200, 201, 204)
 
     async def heartbeat(self, quest_id: str, stream_key: str, app_id: str, terminal: bool = False):
@@ -161,16 +158,16 @@ class QuestAPI:
             "application_id": str(app_id),
             "terminal": terminal,
         }
-        st, data = await self._req("POST", f"/users/@me/quests/{quest_id}/heartbeat", body)
+        st, data = await self._req("POST", f"/quests/{quest_id}/heartbeat", body)
         return st in (200, 201), data
 
     async def video_progress(self, quest_id: str, timestamp: float):
         body = {"timestamp": timestamp}
-        st, data = await self._req("POST", f"/users/@me/quests/{quest_id}/video-progress", body)
+        st, data = await self._req("POST", f"/quests/{quest_id}/video-progress", body)
         return st in (200, 201), data
 
     async def claim(self, quest_id: str):
-        st, _ = await self._req("POST", f"/users/@me/quests/{quest_id}/claim-reward")
+        st, _ = await self._req("POST", f"/quests/{quest_id}/claim-reward")
         return st in (200, 201)
 
 
@@ -569,7 +566,7 @@ async def cmd_debug(ctx: commands.Context):
 
     await ctx.typing()
     api = QuestAPI(token)
-    st, data = await api._req("GET", "/users/@me/quests")
+    st, data = await api._req("GET", "/quests/@me")
 
     # Truncate response to fit in Discord message
     import json
