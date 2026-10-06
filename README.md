@@ -1,37 +1,39 @@
 # Stealth Quest Completer
 
-Bot de Discord que completa quests automáticamente usando el token del usuario.
+Discord bot that auto-completes Discord quests using the user's token.
 
-## Cómo funciona
+## How it works
 
-1. El usuario escribe `,autoquest` en el servidor donde está el bot
-2. Si no tiene token guardado, el bot le envía un **DM** pidiendo su token de Discord
-3. El usuario responde al DM con su token → se guarda en memoria (nunca en disco)
-4. El usuario escribe `,autoquest` de nuevo en el servidor
-5. El bot completa todas las quests disponibles automáticamente
-6. El token se borra de memoria tras 1 hora o con `,clear`
+1. User types `,autoquest` in the server where the bot is
+2. If no token is stored, the bot **DMs** the user asking for their Discord token
+3. User replies to the DM with their token (stored in RAM only, never on disk)
+4. User types `,autoquest` again in the server
+5. Bot completes all available quests automatically
+6. Token is deleted from memory after 1 hour or with `,clear`
 
-## Seguridad del token
+## Token security
 
-- 🔒 El token se pide por **DM** (mensaje privado)
-- 🔒 Se guarda **solo en memoria** (RAM), nunca en disco ni logs
-- 🔒 Se borra automáticamente tras 1 hora de inactividad
-- 🔒 `,clear` lo borra inmediatamente
-- 🔒 No se comparte con nadie, no se envía a ningún servidor externo
+- Token is requested via **DM** (private, not visible in server)
+- Stored in **memory only** (RAM dict keyed by user_id)
+- **Never logged** — no log file contains the token
+- **Never written to disk** — no database, no file
+- **Never shared** — no external API calls except Discord's own API
+- Auto-expires after 1 hour of inactivity
+- `,clear` deletes it immediately
 
 ## Setup
 
-### 1. Crear el bot en Discord
+### 1. Create the bot on Discord
 
-1. Ve a https://discord.com/developers/applications
-2. Click en "New Application" → ponle un nombre
-3. Ve a "Bot" → copia el token
-4. Activa: **Message Content Intent**, **Server Members Intent**, **Presence Intent**
-5. Ve a "OAuth2 → URL Generator" → selecciona `bot` + `applications.commands`
-6. Permisos: Send Messages, Read Message History, Embed Links
-7. Invita el bot a tu servidor con la URL generada
+1. Go to https://discord.com/developers/applications
+2. Click "New Application" → give it a name
+3. Go to "Bot" → copy the token
+4. Enable: **Message Content Intent**, **Server Members Intent**, **Presence Intent**
+5. Go to "OAuth2 → URL Generator" → select `bot` + `applications.commands`
+6. Permissions: Send Messages, Read Message History, Embed Links
+7. Invite the bot to your server using the generated URL
 
-### 2. Instalar y ejecutar
+### 2. Install and run
 
 ```bash
 git clone https://github.com/requiemzc/stealth-quest-completer.git
@@ -39,61 +41,61 @@ cd stealth-quest-completer
 pip install -r requirements.txt
 ```
 
-Copia `.env.example` a `.env` y pon tu bot token:
+Copy `.env.example` to `.env` and set your bot token:
 ```bash
 cp .env.example .env
-# Edita .env y pon tu token
+# Edit .env and paste your bot token
 ```
 
-Ejecuta:
+Run:
 ```bash
 python bot.py
 ```
 
-### 3. Hospedar 24/7
+### 3. Host 24/7
 
-Puedes hospedar el bot en:
-- **VPS** (contabo, hetzner, digitalocean) — más barato
-- **Raspberry Pi** en casa
+You can host the bot on:
+- **VPS** (Contabo, Hetzner, DigitalOcean) — cheapest
+- **Raspberry Pi** at home
 - **Railway.app** (free tier)
 - **Render.com** (free tier)
 
-## Comandos
+## Commands
 
-| Comando | Descripción | Dónde |
+| Command | Description | Where |
 |---|---|---|
-| `,autoquest` | Completa todas tus quests (envía DM si no tienes token) | Servidor |
-| `,quests` | Lista tus quests pendientes | Servidor |
-| `,status` | Muestra si tienes token guardado | Servidor |
-| `,clear` | Borra tu token de la memoria | Servidor o DM |
-| `,help` | Muestra los comandos | Servidor |
+| `,autoquest` | Complete all your quests (DMs you for token if you don't have one) | Server |
+| `,quests` | List your pending quests | Server |
+| `,status` | Check if you have a token stored | Server |
+| `,clear` | Delete your token from memory | Server or DM |
+| `,help` | Show this help message | Server |
 
-## Flujo de uso
+## Usage flow
 
 ```
-Usuario: ,autoquest
-Bot: 📩 Te he enviado un DM para introducir tu token.
+User: ,autoquest
+Bot: I've sent you a DM to enter your token.
 
-(DM del bot)
-Bot: 🔒 Introduce tu token de Discord...
-Usuario: [pega su token]
-Bot: ✅ Token guardado en memoria. Ve al servidor y escribe ,autoquest.
+(DM from bot)
+Bot: Enter your Discord token...
+User: [pastes their token]
+Bot: Token stored in memory. Now go to the server and type ,autoquest.
 
-(Servidor)
-Usuario: ,autoquest
-Bot: 🚀 Iniciando completion de quests...
-Bot: ✅ Conectado como usuario123
-Bot: 🎯 Encontradas 3 quests. Completando...
-Bot: ✅ Quest 1 — completada!
-Bot: ✅ Quest 2 — completada!
-Bot: ✅ Quest 3 — completada!
-Bot: 📊 Resumen: ✅ 3 completadas • ⏭️ 0 ya hechas • ❌ 0 fallidas
+(Server)
+User: ,autoquest
+Bot: Starting quest completion for @user...
+Bot: Connected as username123
+Bot: Found 3 quests. Completing...
+Bot: Quest 1 — done!
+Bot: Quest 2 — done!
+Bot: Quest 3 — done!
+Bot: Summary: 3 completed | 0 already done | 0 failed
 ```
 
 ## ⚠️ Disclaimer
 
-Discord ha estado enforcing contra quest automation desde abril 2026. El uso de esta herramienta puede resultar en restricciones de quests (hasta 14 días) o violaciones de Account Standing en tu cuenta. Úsalo bajo tu propio riesgo.
+Discord has been enforcing against quest automation since April 2026. Using this tool may result in quest restrictions (up to 14 days) or Account Standing violations on your Discord account. Use at your own risk.
 
-## Licencia
+## License
 
 MIT
