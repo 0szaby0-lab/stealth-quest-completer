@@ -85,7 +85,9 @@ class QuestAPI:
         self.h = {
             "Authorization": token,
             "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.1151 Chrome/120.0.6099.291 Electron/29.2.4 Safari/537.36",
+            "X-Discord-Locale": "en-US",
+            "X-Debug-Options": "bugReporterEnabled",
         }
 
     async def _req(self, method: str, path: str, body=None):
@@ -107,8 +109,47 @@ class QuestAPI:
         return data if st == 200 else None
 
     async def get_quests(self):
+        """Fetches quests from Discord API. Returns a list of quest dicts."""
         st, data = await self._req("GET", "/users/@me/quests")
-        return data if st == 200 else []
+        if st != 200 or not data:
+            return []
+
+        # Discord returns quests in various formats depending on the API version:
+        # 1. {"quests": [...]}
+        # 2. [quest1, quest2, ...]
+        # 3. {"1": quest1, "2": quest2, ...} (Map serialized as object)
+        if isinstance(data, list):
+            return data
+        if isinstance(data, dict):
+            if "quests" in data:
+                quests = data["quests"]
+                if isinstance(quests, list):
+                    return quests
+                if isinstance(quests, dict):
+                    return list(quests.values())
+            # Maybe it's a dict of quest_id -> quest
+            for key in ("quest", "items", "data"):
+                if key in data:
+                    items = data[key]
+                    if isinstance(items, list):
+                        return items
+                    if isinstance(items, dict):
+                        return list(items.values())
+            # Fall back: try to extract values that look like quests
+            result = []
+            for v in data.values():
+                if isinstance(v, dict) and ("id" in v or "config" in v or "status" in v):
+                    result.append(v)
+                elif isinstance(v, list):
+                    for item in v:
+                        if isinstance(item, dict) and ("id" in item or "config" in item or "status" in item):
+                            result.append(item)
+            if result:
+                return result
+            # Last resort: maybe the whole dict IS a quest (single quest)
+            if "id" in data or "config" in data:
+                return [data]
+        return []
 
     async def enroll(self, quest_id: str):
         st, _ = await self._req("POST", f"/users/@me/quests/{quest_id}/enroll")
@@ -373,22 +414,7 @@ async def on_message(message: discord.Message):
             f"`{PREFIX}clear`."
         )
 
-        # Notify in the server that the token is ready
-        try:
-            for guild in bot.guilds:
-                if message.author in guild.members:
-                    for ch in guild.text_channels:
-                        if ch.permissions_for(guild.me).send_messages:
-                            await ch.send(
-                                f"{message.author.mention} Your token is ready. "
-                                f"Type `{PREFIX}autoquest` to complete your quests!",
-                                delete_after=60,
-                            )
-                            break
-                    break
-        except Exception:
-            pass
-
+        # Don't announce in the server — keep it private
         return
 
     await bot.process_commands(message)
@@ -529,6 +555,36 @@ async def cmd_clear(ctx: commands.Context):
         await ctx.send("You had no token stored.", delete_after=15)
 
 
+@bot.command(name="debug")
+async def cmd_debug(ctx: commands.Context):
+    """Debug: shows raw quest API response (admin only)."""
+    if isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("This command only works in servers.")
+        return
+
+    token = get_token(ctx.author.id)
+    if not token:
+        await ctx.send("No token stored. Use `,autoquest` first.", delete_after=15)
+        return
+
+    await ctx.typing()
+    api = QuestAPI(token)
+    st, data = await api._req("GET", "/users/@me/quests")
+
+    # Truncate response to fit in Discord message
+    import json
+    raw = json.dumps(data, indent=2) if data else "None"
+    if len(raw) > 1500:
+        raw = raw[:1500] + "\n... (truncated)"
+
+    embed = discord.Embed(
+        title="Debug: Quest API response",
+        description=f"```\nHTTP {st}\n{raw}\n```",
+        color=0x5865F2,
+    )
+    await ctx.send(embed=embed, delete_after=60)
+
+
 @bot.command(name="help")
 async def cmd_help(ctx: commands.Context):
     """Show available commands."""
@@ -542,6 +598,7 @@ async def cmd_help(ctx: commands.Context):
     embed.add_field(name=f"`{PREFIX}status`", value="Check if you have a token stored", inline=False)
     embed.add_field(name=f"`{PREFIX}clear`", value="Delete your token from memory", inline=False)
     embed.add_field(name=f"`{PREFIX}help`", value="Show this help message", inline=False)
+    embed.add_field(name=f"`{PREFIX}debug`", value="Show raw quest API response (for troubleshooting)", inline=False)
     embed.set_footer(text="discord.gg/hqE5drDHF7 | Token is never saved to disk")
     await ctx.send(embed=embed)
 
